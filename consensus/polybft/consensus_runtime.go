@@ -138,7 +138,7 @@ func (c *consensusRuntime) IsBridgeEnabled() bool {
 
 // AddLog is an implementation of eventSubscription interface,
 // and is called from the event tracker when an event is final on the rootchain
-func (c *consensusRuntime) AddLog(eventLog *ethgo.Log) { //nolint
+func (c *consensusRuntime) AddLog(eventLog *ethgo.Log) { // nolint
 	c.logger.Info(
 		"Add State sync event",
 		"block", eventLog.BlockNumber,
@@ -278,13 +278,36 @@ func (c *consensusRuntime) FSM() (*fsm, error) {
 	isEndOfSprint := c.isEndOfSprint(pendingBlockNumber)
 	isEndOfEpoch := c.isEndOfEpoch(pendingBlockNumber)
 
+	// TODO new flow with calculating proposer int the round
+
+	// collect the number of rounds from the beginning of the epoch
+	// this is required for the validator priority queue
+	validatorSet := NewValidatorSet(epoch.Validators)
+	if epoch.Number > 0 { // it must be at least epoc
+		iterationNumber := uint64(0)
+		currentHeader := parent
+		lastBlockOfPreviousEpoch := getEndEpochBlockNumber(epoch.Number-1, c.config.PolyBFTConfig.EpochSize)
+		for currentHeader.Number > lastBlockOfPreviousEpoch {
+			blockExtra, err := GetIbftExtra(currentHeader.ExtraData)
+			if err != nil {
+				return nil, err
+			}
+
+			iterationNumber += blockExtra.Round + 1 // because round 0 is one of the iterations
+			currentHeader, _ = c.config.blockchain.GetHeaderByNumber(currentHeader.Number - 1)
+		}
+		if iterationNumber > 0 {
+			_ = validatorSet.IncrementProposerPriority(iterationNumber)
+		}
+	}
+
 	ff := &fsm{
 		config:         c.config.PolyBFTConfig,
 		parent:         parent,
 		backend:        c.config.blockchain,
 		polybftBackend: c.config.polybftBackend,
 		blockBuilder:   blockBuilder,
-		validators:     newValidatorSet(types.BytesToAddress(parent.Miner), epoch.Validators),
+		validators:     NewValidatorSet(epoch.Validators),
 		isEndOfEpoch:   isEndOfEpoch,
 		isEndOfSprint:  isEndOfSprint,
 		logger:         c.logger.Named("fsm"),
@@ -512,9 +535,9 @@ func (c *consensusRuntime) getAggSignatureForCommitmentMessage(epoch *epochMetad
 	commitmentHash types.Hash) (Signature, [][]byte, error) {
 	validators := epoch.Validators
 
-	nodeIDIndexMap := make(map[pbft.NodeID]int, validators.Len())
+	nodeIDIndexMap := make(map[string]int, validators.Len())
 	for i, validator := range validators {
-		nodeIDIndexMap[pbft.NodeID(validator.Address.String())] = i
+		nodeIDIndexMap[validator.Address.String()] = i
 	}
 
 	// get all the votes from the database for this commitment

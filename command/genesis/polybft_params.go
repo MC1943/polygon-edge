@@ -243,9 +243,10 @@ func generateExtraDataPolyBft(validators []GenesisTarget) []byte {
 	}
 
 	for i, validator := range validators {
-		delta.Added[i] = &polybft.ValidatorAccount{
+		delta.Added[i] = &polybft.ValidatorMetadata{
 			Address: types.Address(validator.Account.Ecdsa.Address()),
 			BlsKey:  validator.Account.Bls.PublicKey(),
+			// 	TODO votingPower?
 		}
 	}
 

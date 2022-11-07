@@ -18,8 +18,6 @@ import (
 	"github.com/umbracle/ethgo"
 )
 
-var _ pbft.Backend = &fsm{}
-
 type blockBuilder interface {
 	Reset() error
 	WriteTx(*types.Transaction) error
@@ -490,7 +488,7 @@ func (f *fsm) Height() uint64 {
 }
 
 // ValidatorSet returns the validator set for the current round
-func (f *fsm) ValidatorSet() pbft.ValidatorSet {
+func (f *fsm) ValidatorSet() ValidatorSet {
 	return f.validators
 }
 
@@ -506,10 +504,10 @@ func (f *fsm) getValidatorSetDelta(pendingBlockState *state.Transition) (*Valida
 	newValidators, err := systemState.GetValidatorSet()
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve validator set for current block %w", err)
+		return nil, fmt.Errorf("failed to retrieve validator set for current block: %w", err)
 	}
 
-	return createValidatorSetDelta(f.logger, f.validators.Accounts(), newValidators)
+	return createValidatorSetDelta(f.validators.Accounts(), newValidators)
 }
 
 // verifyValidatorsUptimeTx creates uptime transaction and compares its hash with the one extracted from the block.

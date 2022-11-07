@@ -3,8 +3,6 @@ package polybft
 import (
 	"fmt"
 
-	"github.com/hashicorp/go-hclog"
-
 	bls "github.com/0xPolygon/polygon-edge/consensus/polybft/signer"
 
 	"github.com/0xPolygon/polygon-edge/consensus/polybft/bitmap"
@@ -32,6 +30,7 @@ type Extra struct {
 	Seal       []byte
 	Parent     *Signature
 	Committed  *Signature
+	Round      uint64
 }
 
 // MarshalRLPTo defines the marshal function wrapper for Extra
@@ -72,6 +71,9 @@ func (i *Extra) MarshalRLPWith(ar *fastrlp.Arena) *fastrlp.Value {
 	} else {
 		vv.Set(i.Committed.MarshalRLPWith(ar))
 	}
+
+	// Round
+	vv.Set(ar.NewUint(i.Round))
 
 	return vv
 }
@@ -131,15 +133,27 @@ func (i *Extra) UnmarshalRLPWith(v *fastrlp.Value) error {
 		}
 	}
 
+	// Round
+	{
+		round, err := elems[4].GetUint64()
+		if err != nil {
+			return err
+		}
+		i.Round = round
+
+	}
+
 	return nil
 }
 
 // createValidatorSetDelta calculates ValidatorSetDelta based on the provided old and new validator sets
-func createValidatorSetDelta(log hclog.Logger, oldValidatorSet,
-	newValidatorSet AccountSet) (*ValidatorSetDelta, error) {
+func createValidatorSetDelta(
+	oldValidatorSet,
+	newValidatorSet AccountSet,
+) (*ValidatorSetDelta, error) {
 	var addedValidators AccountSet
 
-	oldValidatorSetMap := make(map[types.Address]*ValidatorAccount)
+	oldValidatorSetMap := make(map[types.Address]*ValidatorMetadata)
 	removedValidators := map[types.Address]int{}
 
 	for i, validator := range oldValidatorSet {
@@ -226,7 +240,7 @@ func (d *ValidatorSetDelta) UnmarshalRLPWith(v *fastrlp.Value) error {
 			d.Added = make(AccountSet, len(validatorsRaw))
 
 			for i, validatorRaw := range validatorsRaw {
-				acc := &ValidatorAccount{}
+				acc := &ValidatorMetadata{}
 				if err = acc.UnmarshalRLPWith(validatorRaw); err != nil {
 					return err
 				}
